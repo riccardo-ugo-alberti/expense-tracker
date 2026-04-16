@@ -26,10 +26,42 @@ class TimestampMixin:
     )
 
 
+class Account(Base, TimestampMixin):
+    __tablename__ = "accounts"
+    __table_args__ = (
+        UniqueConstraint("bank_name", "account_name", name="uq_accounts_bank_name_account_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bank_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    account_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_type: Mapped[str | None] = mapped_column(String(50))
+    currency: Mapped[str] = mapped_column(String(3), default="EUR", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class ImportRun(Base):
+    __tablename__ = "import_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    row_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False, index=True)
+
+
 class TransactionRaw(Base):
     __tablename__ = "transactions_raw"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    import_run_id: Mapped[int | None] = mapped_column(ForeignKey("import_runs.id"), index=True)
     source_file: Mapped[str | None] = mapped_column(String(255))
     external_id: Mapped[str | None] = mapped_column(String(255), index=True)
     posted_at: Mapped[date | None] = mapped_column(Date)
@@ -48,6 +80,7 @@ class TransactionClean(Base):
     __tablename__ = "transactions_clean"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
     raw_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions_raw.id"), index=True)
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -55,6 +88,10 @@ class TransactionClean(Base):
     category: Mapped[str | None] = mapped_column(String(100), index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="EUR", nullable=False)
+    direction: Mapped[str] = mapped_column(String(20), default="expense", nullable=False, index=True)
+    internal_transfer_candidate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    transfer_group: Mapped[str | None] = mapped_column(String(100), index=True)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
